@@ -5,6 +5,10 @@ from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_core.outputs import ChatGeneration, ChatResult
 from langchain_core.language_models import BaseChatModel
 import time
+import io
+from docx import Document
+from docx.shared import Pt
+from docx.enum.text import WD_PARAGRAPH_ALIGNMENT
 
 
 class QwenChat(BaseChatModel):
@@ -73,6 +77,79 @@ class QwenChat(BaseChatModel):
             raise Exception(f"调用 Qwen 模型时发生错误: {e}")
 
 
+def create_word_document(content, theme):
+    """将文本内容转换为格式化的Word文档[1,6](@ref)"""
+    doc = Document()
+
+    # 设置文档标题[6](@ref)
+    title = doc.add_paragraph()
+    title_run = title.add_run(f"{theme}项目设计方案")
+    title_run.font.size = Pt(16)
+    title_run.font.bold = True
+    title.alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
+
+    # 添加空行
+    doc.add_paragraph()
+
+    # 处理内容并添加到文档
+    current_paragraph = None
+
+    for line in content.split('\n'):
+        line = line.strip()
+        if not line:
+            continue
+
+        # 检测标题格式
+        if line.startswith('##### '):
+            # 添加标题[6](@ref)
+            heading_text = line.replace('##### ', '').strip()
+            heading = doc.add_paragraph()
+            heading_run = heading.add_run(heading_text)
+            heading_run.font.size = Pt(14)
+            heading_run.font.bold = True
+            current_paragraph = None
+
+        elif line.startswith('        ') or any(
+                line.startswith(char) for char in ['-', '*', '•', '1.', '2.', '3.', '4.']):
+            # 列表项或缩进内容[6](@ref)
+            if current_paragraph is None:
+                current_paragraph = doc.add_paragraph()
+            else:
+                current_paragraph = doc.add_paragraph()
+
+            list_text = line.strip()
+            # 移除列表标记前的空格
+            if list_text.startswith(('- ', '* ', '• ')):
+                list_text = list_text[2:]
+            elif any(list_text.startswith(f"{i}.") for i in range(1, 10)):
+                list_text = list_text[list_text.find('.') + 1:].strip()
+
+            current_paragraph.add_run("    " + list_text)
+
+        else:
+            # 普通段落[6](@ref)
+            current_paragraph = doc.add_paragraph()
+            current_paragraph.add_run(line)
+
+    return doc
+
+
+def download_word_file(doc, theme):
+    """创建Word文档下载按钮[1](@ref)"""
+    bio = io.BytesIO()
+    doc.save(bio)
+    bio.seek(0)
+
+    st.download_button(
+        label="📥 下载Word文档",
+        data=bio,
+        file_name=f"{theme}项目设计方案.docx",
+        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        help="点击下载完整项目设计方案Word文档",
+        key=f"download_{theme}"  # 确保每次生成都有唯一的key
+    )
+
+
 # Streamlit应用
 st.title("智能项目功能生成器")
 
@@ -86,19 +163,18 @@ st.sidebar.header("项目设置")
 modules = st.sidebar.multiselect(
     "选择项目模块",
     ["电机", "显示屏", "串口通信", "外部中断", "定时器"],
-    default=["显示屏"],)
+    default=["显示屏"],
+)
 
 # 确保至少选择了一个模块
 if not modules:
     st.sidebar.error("请至少选择一个项目模块")
 
 theme = st.sidebar.text_input("项目主题", "智能流水线")
-
-function = st.sidebar.text_area("项目功能", "自动启停", height=100,)
+function = st.sidebar.text_area("项目功能", "自动启停", height=100)
 
 
 def _get_general_info(modules, theme, function):
-
     modules_desc = "、".join(modules)
 
     key_requirements = """
@@ -295,7 +371,7 @@ def _get_mode_description(theme):
             1. **自动灌溉模式**
                - 智能浇水状态
                - 根据土壤湿度调节
-               - 指示灯：蓝色常亮
+               - 指示灯：蓝色极亮
 
             2. **通风模式**
                - 空气循环状态
@@ -303,13 +379,13 @@ def _get_mode_description(theme):
                - 防止病虫害
                - 指示灯：绿色慢闪
 
-            3. **补光模式**
+            极. **补光模式**
                - 光照增强状态
                - 阴天或夜间补充光照
                - 促进植物生长
                - 指示灯：黄色闪烁
 
-            4. **监控模式**
+            4. **监控极式**
                - 环境监测状态
                - 实时采集温湿度数据
                - 生成生长报告
@@ -334,7 +410,7 @@ def _get_mode_description(theme):
                - 车辆离开管理
                - 费用计算
                - 支付处理
-               - 指示灯：蓝色闪烁
+              极 指示灯：蓝色闪烁
 
             3. **寻车模式**
                - 帮助车主找车
@@ -363,7 +439,7 @@ def _get_mode_description(theme):
                - 指示灯：白色常亮
 
             2. **节能模式**
-               - 低功耗运行状态
+               - 低功耗极行状态
                - 根据环境光调节亮度
                - 减少能耗
                - 指示灯：绿色慢闪
@@ -416,7 +492,7 @@ def create_prompt(modules, theme, function):
 
     # 构建完整提示词
     prompt = f"""
-        你是一位嵌入式系统课程设计出题专家，请根据嵌入式课堂项目设计标准格式，编写一个基于{gen_info['modules_desc']}的{theme}项目任务书。
+        你是一位嵌入式系统课程设计出题专家，请根据嵌入式课堂项目设计标准格式，编写一个基于{gen_info['modules_desc']}的{theme}极目任务书。
 
         **项目主题：**
         {theme}
@@ -478,6 +554,7 @@ def create_prompt(modules, theme, function):
     """
     return prompt
 
+
 # 生成项目功能
 def generate_project(prompt, api_key):
     if not api_key:
@@ -513,7 +590,7 @@ if st.button("生成设计方案", type="primary", help="点击生成完整设�
             status_text.text(f"准备项目参数... {percent * 10}%")
             time.sleep(0.05)
 
-        prompt = create_prompt(modules, theme, function)  # 调用时不带 complexity 参数
+        prompt = create_prompt(modules, theme, function)
         progress_bar.progress(30)
         status_text.text("创建设计方案结构...")
 
@@ -530,5 +607,13 @@ if st.button("生成设计方案", type="primary", help="点击生成完整设�
 
             st.subheader(f"{theme}项目设计方案")
             st.markdown(project_content, unsafe_allow_html=True)
+
+            # 添加Word文档下载功能
+            try:
+                doc = create_word_document(project_content, theme)
+                download_word_file(doc, theme)
+                st.success("Word文档已准备就绪，请点击上方下载按钮保存")
+            except Exception as e:
+                st.error(f"创建Word文档时出错: {str(e)}")
 
         progress_bar.empty()
